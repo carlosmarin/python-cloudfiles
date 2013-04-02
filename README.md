@@ -2,7 +2,7 @@ python-cloudfiles
 =================
 
 IMPORTANT NOTE:
-The pyhton-cloudfiles bindings are no longer being maintained and their
+The python-cloudfiles bindings are no longer being maintained and their
 use is deprecated. They will not be available after August 1, 2013.
 
 We recommend that you use the pyrax bindings; this supports
