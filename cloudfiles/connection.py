@@ -12,16 +12,18 @@ import  socket
 import  os
 from    urllib    import urlencode
 from    httplib   import HTTPSConnection, HTTPConnection, HTTPException
+from    Queue     import Queue, Empty, Full
+from    time      import time
+from    sys       import version_info
+
 from    container import Container, ContainerResults
 from    utils     import unicode_quote, parse_url, THTTPConnection, THTTPSConnection
 from    errors    import ResponseError, NoSuchContainer, ContainerNotEmpty, \
                          InvalidContainerName, CDNNotEnabled, ContainerExists
-from    Queue     import Queue, Empty, Full
-from    time      import time
 import  consts
 from    authentication import Authentication
-from    fjson     import json_loads
-from    sys       import version_info
+from    cloudfiles.fjson import json_loads
+
 # Because HTTPResponse objects *have* to have read() called on them
 # before they can be used again ...
 # pylint: disable-msg=W0612
@@ -74,15 +76,20 @@ class Connection(object):
             self.servicenet = True
 
         self.auth = 'auth' in kwargs and kwargs['auth'] or None
+        self.auth_version = 'auth_version' in kwargs and kwargs['auth_version'] or None
+        self.storage_region = 'storage_region' in kwargs and kwargs['storage_region'] or None
 
         if not self.auth:
             authurl = kwargs.get('authurl', consts.us_authurl)
             if username and api_key and authurl:
                 self.auth = Authentication(username, api_key, authurl=authurl,
-                            useragent=self.user_agent, timeout=self.timeout)
+                            useragent=self.user_agent, timeout=self.timeout,
+                            auth_version=self.auth_version, storage_region=self.storage_region,
+                            servicenet=self.servicenet)
             else:
                 raise TypeError("Incorrect or invalid arguments supplied")
         self._authenticate()
+
     def _authenticate(self):
         """
         Authenticate and setup this instance with the values returned.

@@ -9,19 +9,25 @@ See COPYING for license information.
 """
 
 from httplib  import HTTPSConnection, HTTPConnection
-from utils    import parse_url, THTTPConnection, THTTPSConnection
-from errors   import ResponseError, AuthenticationError, AuthenticationFailed
-from consts   import user_agent, us_authurl, uk_authurl
 from sys      import version_info
 
+from utils    import parse_url, THTTPConnection, THTTPSConnection
+from cloudfiles.errors import ResponseError, AuthenticationError, AuthenticationFailed
+from cloudfiles.fjson import json_loads
+from consts   import user_agent, us_authurl, object_store_service_name, object_cdn_service_name
+
+INVALID_RESP_MSG = "Invalid response from the authentication service."
 
 class BaseAuthentication(object):
     """
     The base authentication class from which all others inherit.
     """
     def __init__(self, username, api_key, authurl=us_authurl, timeout=15,
-                 useragent=user_agent):
+                 useragent=user_agent,  auth_version='2.0', storage_region=None, servicenet=None):
         self.authurl = authurl
+        self.auth_version = auth_version
+        self.storage_region = storage_region
+        self.servicenet = servicenet
         self.headers = dict()
         self.headers['x-auth-user'] = username
         self.headers['x-auth-key'] = api_key
@@ -63,10 +69,18 @@ class Authentication(BaseAuthentication):
         two-tuple containing the storage system URL and session token.
         """
         conn = self.conn_class(self.host, self.port, timeout=self.timeout)
-        #conn = self.conn_class(self.host, self.port)
-        conn.request('GET', '/' + self.uri, headers=self.headers)
+
+        if self.auth_version == '2.0':
+            self.headers['content-type'] = 'application/json'
+            self.headers['accept'] = 'application/json'
+            body = '{"auth":{"RAX-KSKEY:apiKeyCredentials":{"username":"%s","apiKey":"%s"}}}' \
+                   % (self.headers['x-auth-user'], self.headers['x-auth-key'])
+            conn.request('POST', '/' + self.uri, body=body, headers=self.headers)
+        else:
+            conn.request('GET', '/' + self.uri, headers=self.headers)
+
         response = conn.getresponse()
-        response.read()
+        data = response.read()
 
         # A status code of 401 indicates that the supplied credentials
         # were not accepted by the authentication service.
@@ -79,21 +93,55 @@ class Authentication(BaseAuthentication):
 
         storage_url = cdn_url = auth_token = None
 
-        for hdr in response.getheaders():
-            if hdr[0].lower() == "x-storage-url":
-                storage_url = hdr[1]
-            if hdr[0].lower() == "x-cdn-management-url":
-                cdn_url = hdr[1]
-            if hdr[0].lower() == "x-storage-token":
-                auth_token = hdr[1]
-            if hdr[0].lower() == "x-auth-token":
-                auth_token = hdr[1]
+        if self.auth_version == '2.0':
+            try:
+                data = json_loads(data)
+            except:
+                raise AuthenticationError(INVALID_RESP_MSG)
+
+            auth_token = data.get('access', {}).get('token', {}).get('id')
+
+            # FIXME (Carlos): Improve ...
+            for service in data.get('access', {}).get('serviceCatalog', {}):
+                if service.get('name') == object_store_service_name:
+                    endpoints = service.get('endpoints', {})
+                    if self.storage_region is None and len(endpoints) > 0:
+                        # First endpoint is the single 'x-storage-url' returned in Rackspace Auth v1.0
+                        storage_url = endpoints[0].get('internalURL' if self.servicenet else 'publicURL')
+                    else:
+                        for ep in endpoints:
+                            if ep.get('region') == self.storage_region:
+                                storage_url = ep.get('internalURL' if self.servicenet else 'publicURL')
+                                break
+
+                if service.get('name') == object_cdn_service_name:
+                    endpoints = service.get('endpoints', {})
+                    if self.storage_region is None and len(endpoints) > 0:
+                        cdn_url = endpoints[0].get('publicURL')
+                    else:
+                        for ep in endpoints:
+                            if ep.get('region') == self.storage_region:
+                                cdn_url = ep.get('publicURL')
+                                break
+
+            if storage_url is None and self.storage_region:
+                raise AuthenticationError('Unable to get Storage URL for region: "%s"' % self.storage_region)
+
+        else:
+            for hdr in response.getheaders():
+                if hdr[0].lower() == "x-storage-url":
+                    storage_url = hdr[1]
+                if hdr[0].lower() == "x-cdn-management-url":
+                    cdn_url = hdr[1]
+                if hdr[0].lower() == "x-storage-token":
+                    auth_token = hdr[1]
+                if hdr[0].lower() == "x-auth-token":
+                    auth_token = hdr[1]
 
         conn.close()
 
         if not (auth_token and storage_url):
-            raise AuthenticationError("Invalid response from the " \
-                    "authentication service.")
+            raise AuthenticationError(INVALID_RESP_MSG)
 
         return (storage_url, cdn_url, auth_token)
 
