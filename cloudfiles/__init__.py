@@ -7,8 +7,14 @@ Working with result sets:
     >>> # conn = cloudfiles.get_connection(username='jsmith', \
                  api_key='1234567890')
     >>> conn = cloudfiles.get_connection('jsmith', '1234567890')
+    >>> # To use a region other than the default one. Ensure Cloud Server region match for ServiceNet to work.
+    >>> conn = cloudfiles.get_connection('jsmith', '1234567890', \
+                                         storage_region='DFW')
+    >>> # To use Auth v1.0
+    >>> conn = cloudfiles.get_connection('jsmith', '1234567890', \
+                                         auth_version='1.0')
     >>> # NOTE: For Uk Customers please pass in Default UK Auth URL like EX
-    >>> conn = cloudfiles.get_connection('username', 'api_key', \ 
+    >>> conn = cloudfiles.get_connection('username', 'api_key', \
     >>>                                  authurl = cloudfiles.uk_authurl)
     >>> # This will force connectivity to the UK's Auth Service
     >>> containers = conn.get_all_containers()
