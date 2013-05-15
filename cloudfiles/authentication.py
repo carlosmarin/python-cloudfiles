@@ -106,6 +106,7 @@ class Authentication(BaseAuthentication):
                         if self.storage_region is None and len(endpoints) > 0:
                             # First endpoint is the single 'x-storage-url' returned in Rackspace Auth v1.0
                             storage_url = endpoints[0]['internalURL' if self.servicenet else 'publicURL']
+                            break
                         else:
                             for ep in endpoints:
                                 if ep['region'] == self.storage_region:
