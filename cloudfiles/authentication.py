@@ -96,33 +96,33 @@ class Authentication(BaseAuthentication):
         if self.auth_version == '2.0':
             try:
                 data = json_loads(data)
+
+                auth_token = data['access']['token']['id']
+
+                # FIXME (Carlos): Improve ...
+                for service in data['access']['serviceCatalog']:
+                    if service['name'] == object_store_service_name:
+                        endpoints = service['endpoints']
+                        if self.storage_region is None and len(endpoints) > 0:
+                            # First endpoint is the single 'x-storage-url' returned in Rackspace Auth v1.0
+                            storage_url = endpoints[0]['internalURL' if self.servicenet else 'publicURL']
+                        else:
+                            for ep in endpoints:
+                                if ep['region'] == self.storage_region:
+                                    storage_url = ep['internalURL' if self.servicenet else 'publicURL']
+                                    break
+
+                    if service['name'] == object_cdn_service_name:
+                        endpoints = service['endpoints']
+                        if self.storage_region is None and len(endpoints) > 0:
+                            cdn_url = endpoints[0]['publicURL']
+                        else:
+                            for ep in endpoints:
+                                if ep['region'] == self.storage_region:
+                                    cdn_url = ep['publicURL']
+                                    break
             except:
                 raise AuthenticationError(INVALID_RESP_MSG)
-
-            auth_token = data.get('access', {}).get('token', {}).get('id')
-
-            # FIXME (Carlos): Improve ...
-            for service in data.get('access', {}).get('serviceCatalog', {}):
-                if service.get('name') == object_store_service_name:
-                    endpoints = service.get('endpoints', {})
-                    if self.storage_region is None and len(endpoints) > 0:
-                        # First endpoint is the single 'x-storage-url' returned in Rackspace Auth v1.0
-                        storage_url = endpoints[0].get('internalURL' if self.servicenet else 'publicURL')
-                    else:
-                        for ep in endpoints:
-                            if ep.get('region') == self.storage_region:
-                                storage_url = ep.get('internalURL' if self.servicenet else 'publicURL')
-                                break
-
-                if service.get('name') == object_cdn_service_name:
-                    endpoints = service.get('endpoints', {})
-                    if self.storage_region is None and len(endpoints) > 0:
-                        cdn_url = endpoints[0].get('publicURL')
-                    else:
-                        for ep in endpoints:
-                            if ep.get('region') == self.storage_region:
-                                cdn_url = ep.get('publicURL')
-                                break
 
             if storage_url is None and self.storage_region:
                 raise AuthenticationError('Unable to get Storage URL for region: "%s"' % self.storage_region)
